@@ -20,7 +20,7 @@
 
 SoftwareSerial bluetooth(PIN_BT_TX, PIN_BT_RX);
 
-#define SERIAL_DATA_EXCHANGE
+//#define SERIAL_DATA_EXCHANGE
 
 int frontDistance = 0;
 byte ultrasonicArrayPointer = 0;
@@ -72,8 +72,14 @@ void setup()
 /*
  * Function to drive.
  */
-void Drive(int speedR = 100, int speedL = 100, int time = 0)
+void Drive(int speedL = 100, int speedR = 100, int time = 0)
 {
+#ifdef SERIAL_DATA_EXCHANGE
+  Serial.print("Left motor speed: ");
+  Serial.print(speedL);
+  Serial.print(";Right motor speed: ");
+  Serial.println(speedR);
+#endif
   if (speedR > 0) {
     digitalWrite(PIN_RIGHT_MOTOR_FORWARD, HIGH);
     digitalWrite(PIN_RIGHT_MOTOR_BACKWARD, LOW);
@@ -173,7 +179,7 @@ int GetUSonicDistance()
   return result;
 }  
 
-void GetControlSignal() {
+bool GetControlSignal() {
   static unsigned long buttonPressedTime;
   static bool buttonPressed = false;
   if (bluetooth.available()) {
@@ -181,6 +187,7 @@ void GetControlSignal() {
 #ifdef SERIAL_DATA_EXCHANGE
     Serial.print(inputChar);
 #endif
+    // change mode to idle
     if (inputChar == ' ') {
       if (robotMode != modeIdle) {
         previousRobotMode = robotMode;
@@ -189,8 +196,9 @@ void GetControlSignal() {
       else {
         robotMode = previousRobotMode;
       }
-      return;
+      return true;
     }
+    // change mode to keep distance from the wall
     else if (inputChar == '1') {
       if (robotMode == modeIdle) {
         previousRobotMode = modeKeepWallDistance;
@@ -198,8 +206,9 @@ void GetControlSignal() {
       else {
         robotMode = modeKeepWallDistance;
       }
-      return;
+      return true;
     }
+    // change mode to bluetooth remote
     else if (inputChar == '2') {
       if (robotMode == modeIdle) {
         previousRobotMode = modeBluetooth;
@@ -207,8 +216,9 @@ void GetControlSignal() {
       else {
         robotMode = modeBluetooth;
       }
-      return;
+      return true;
     }
+    // change mode to free ride avoiding obstacles
     else if (inputChar == '3') {
       if (robotMode == modeIdle) {
         previousRobotMode = modeAvoidance;
@@ -216,7 +226,64 @@ void GetControlSignal() {
       else {
         robotMode = modeAvoidance;
       }
-      return;
+      return true;
+    }
+    // if in bluetooth mode get commands
+    else if (robotMode == modeBluetooth or (robotMode == modeIdle and previousRobotMode == modeBluetooth)) {
+      // increase speed
+      if (inputChar == 'w') {
+        if (leftWheelSpeed + DRIVE_VALUE_STEP < 256 and rightWheelSpeed + DRIVE_VALUE_STEP < 256) {
+           leftWheelSpeed += DRIVE_VALUE_STEP;
+           rightWheelSpeed += DRIVE_VALUE_STEP;
+           return true;
+        }
+      }
+      // decrease speed
+      else if (inputChar == 's') {
+        if (leftWheelSpeed - DRIVE_VALUE_STEP > -256 and rightWheelSpeed - DRIVE_VALUE_STEP > -256) {
+           leftWheelSpeed -= DRIVE_VALUE_STEP;
+           rightWheelSpeed -= DRIVE_VALUE_STEP;
+           return true;
+        }
+      }
+      // turn left
+      else if (inputChar == 'a') {
+        if (leftWheelSpeed <= rightWheelSpeed) {
+          if (leftWheelSpeed - DRIVE_VALUE_STEP > -256) {
+            leftWheelSpeed -= DRIVE_VALUE_STEP;
+            return true;
+          }
+        }
+        else {
+          rightWheelSpeed += DRIVE_VALUE_STEP;
+          return true;
+        }
+      }
+      // turn right
+      else if (inputChar == 'd') {
+        if (rightWheelSpeed <= leftWheelSpeed) {
+          if (rightWheelSpeed - DRIVE_VALUE_STEP > -256) {
+            rightWheelSpeed -= DRIVE_VALUE_STEP;
+            return true;
+          }
+        }
+        else {
+          leftWheelSpeed += DRIVE_VALUE_STEP;
+          return true;
+        }
+      }
+      // go straight
+      else if (inputChar == 'r') {
+        if (rightWheelSpeed <= 0 and leftWheelSpeed <= 0) {
+          rightWheelSpeed = min(rightWheelSpeed, leftWheelSpeed);
+          leftWheelSpeed = rightWheelSpeed;
+        }
+        else {
+          rightWheelSpeed = max(rightWheelSpeed, leftWheelSpeed);
+          leftWheelSpeed = rightWheelSpeed;
+        }
+        return true;
+      }
     }
   }
   if (millis() - buttonPressedTime > 10) {
@@ -232,6 +299,7 @@ void GetControlSignal() {
         }
         buttonPressedTime = millis();
         digitalWrite(PIN_BUZZER, LOW);
+        return true;
       }
     }
     else {
@@ -242,28 +310,33 @@ void GetControlSignal() {
       }
     }
   }
+  return false;
 }
 
 void loop()
 {
-  GetControlSignal();
-  if (robotMode == modeKeepWallDistance) {
-    frontDistance = GetUSonicDistance();
-    if (frontDistance > maxDistance) {
-      DriveForward();
+  if (GetControlSignal() or robotMode == modeKeepWallDistance) {
+    if (robotMode == modeKeepWallDistance) {
+      frontDistance = GetUSonicDistance();
+      if (frontDistance > maxDistance) {
+        DriveForward();
+      }
+      else if (frontDistance < minDistance) {
+        DriveBackward();
+      }
+      else {
+        DriveStop();
+      }
+#ifdef SERIAL_DATA_EXCHANGE
+      Serial.println(frontDistance);
+#endif
     }
-    else if (frontDistance < minDistance) {
-      DriveBackward();
+    else if (robotMode == modeBluetooth) {
+      Drive(leftWheelSpeed, rightWheelSpeed);
     }
-    else {
+    else if (robotMode == modeIdle) {
       DriveStop();
     }
-#ifdef SERIAL_DATA_EXCHANGE
-    Serial.println(frontDistance);
-#endif
-  }
-  else if (robotMode == modeIdle) {
-    DriveStop();
   }
 }
 
