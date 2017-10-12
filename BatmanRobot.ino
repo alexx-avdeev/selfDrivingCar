@@ -72,7 +72,7 @@ void setup()
 /*
  * Function to drive.
  */
-void Drive(int speedR = 100, speedL = 100, int time = 0)
+void Drive(int speedR = 100, int speedL = 100, int time = 0)
 {
   if (speedR > 0) {
     digitalWrite(PIN_RIGHT_MOTOR_FORWARD, HIGH);
@@ -116,7 +116,7 @@ void Drive(int speedR = 100, speedL = 100, int time = 0)
 /*
  * Function to drive foward
  */
-viod DriveForward(int speed = 100, int time = 10) {
+void DriveForward(int speed = 100, int time = 10) {
   Drive(speed, speed, time);
 }
 
@@ -164,8 +164,9 @@ int GetUSonicDistance()
   distance = ultrasonicMeasurmentsSum / ULTRASONIC_MEASURMENTS_ARRAY_SIZE;
 
 #ifdef SERIAL_DATA_EXCHANGE
-  Serial.print("Distance: ");      //Output Distance(cm)
-  Serial.println(distance);         //display distance
+  // Output distance to console
+  Serial.print("Distance: ");
+  Serial.println(distance);
 #endif
   
   int result = distance;
@@ -265,13 +266,4 @@ void loop()
     DriveStop();
   }
 }
-
-
-
-
-
-
-
-
-
 
